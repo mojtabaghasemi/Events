@@ -336,18 +336,6 @@ function order_events_display() {
 }
 add_action( 'woocommerce_account_order-events_endpoint', 'order_events_display' );
 
-function order_events_icon_color() {
-    $icon_color = get_option( 'primary_color' );
-    ?>
-    <style>
-        .order-events-icon:before {
-            color: #<?php echo $icon_color; ?>;
-        }
-    </style>
-    <?php
-}
-add_action( 'wp_head', 'order_events_icon_color' );
-
 add_action( 'wp_head', 'customstyle' ,99999);
 
 function customstyle(){
