@@ -300,7 +300,7 @@ function event_process_payment() {
                 $gateway_transaction_key = get_option('event_transaction_key');
                 $gateway_merchant_id = get_option('event_merchant_id');
                 $gateway_terminal_id = get_option('event_terminal_id');
-                $redirect_url =  plugin_dir_url( __FILE__ ) . 'single-event.php';
+                $redirect_url =  plugin_dir_url( __FILE__ ) . 'callback-payment.php';
 
                 $payment_class = new Payment();
                 $payment_class
