@@ -341,3 +341,125 @@ add_action( 'wp_head', 'customstyle' ,99999);
 function customstyle(){
     echo '<style>li.woocommerce-MyAccount-navigation-link--order-events a:before {content: "\f005";font-family: FontAwesome;color: #1597e5;margin-left: 2px}</style>';
 }
+
+
+// افزودن یک دکمه جدید به زیر منو رویدادها
+function event_payments_submenu_page() {
+    add_submenu_page(
+        'edit.php?post_type=event',
+        __('سفارشات', 'textdomain'),
+        __('سفارشات', 'textdomain'),
+        'manage_options',
+        'event-payments',
+        'event_payments_callback'
+    );
+}
+add_action('admin_menu', 'event_payments_submenu_page');
+
+require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
+
+class Event_Payments_Table extends WP_List_Table {
+    private $transactions;
+
+    public function set_transactions($transactions) {
+        $this->transactions = $transactions;
+    }
+
+    public function get_columns() {
+        return array(
+            'id' => __('ID', 'textdomain'),
+            'display_name' => __('نام و نام خانوادگی', 'textdomain'),
+            'post_title' => __('عنوان رویداد', 'textdomain'),
+            'order_id' => __('شماره سفارش', 'textdomain'),
+            'system_trace_no' => __('شماره پیگیری', 'textdomain'),
+            'amount' => __('مبلغ', 'textdomain'),
+            'payment_date' => __('تاریخ', 'textdomain'),
+            'status' => __('وضعیت سفارش', 'textdomain')
+        );
+    }
+
+    public function prepare_items() {
+        $columns = $this->get_columns();
+        $hidden = array();
+        $sortable = $this->get_sortable_columns();
+
+        $this->_column_headers = array($columns, $hidden, $sortable);
+
+        $per_page = 20;
+        $current_page = $this->get_pagenum();
+        $total_items = count($this->transactions);
+
+        $this->items = array_slice($this->transactions, ($current_page-1)*$per_page, $per_page);
+
+        $this->set_pagination_args(array(
+            'total_items' => $total_items,
+            'per_page' => $per_page,
+            'total_pages' => ceil($total_items/$per_page)
+        ));
+    }
+
+    public function get_sortable_columns() {
+        return array(
+            'id' => array('id', false),
+            'post_title' => array('post_title', false),
+            'order_id' => array('order_id', false),
+            'display_name' => array('display_name', false),
+            'system_trace_no' => array('system_trace_no', false),
+            'amount' => array('amount', false),
+            'payment_date' => array('payment_date', false),
+            'status' => array('status', false)
+        );
+    }
+
+    public function column_default($item, $column_name) {
+        switch ($column_name) {
+            case 'id':
+            case 'order_id':
+            case 'post_title':
+            case 'display_name':
+            case 'system_trace_no':
+                return $item->$column_name;
+            case 'amount':
+                return number_format($item->amount) . ' ریال ';
+            case 'payment_date':
+                return date('F j, Y', strtotime($item->payment_date));
+            case 'status':
+                return $item->status == "pending" ? "در انتضار پرداخت" : "پرداخت شده";
+            default:
+                return '';
+        }
+    }
+}
+
+function event_payments_callback() {
+
+    global $wpdb;
+    $table_payments = $wpdb->prefix . 'event_payments';
+    $table_orders = $wpdb->prefix . 'event_orders';
+    $table_users = $wpdb->prefix . 'users';
+    $table_posts = $wpdb->prefix . 'posts';
+
+    $transactions = $wpdb->get_results(
+        "SELECT o.*, p.*, u.display_name, pst.post_title
+    FROM $table_orders o
+    JOIN $table_payments p ON p.order_id = o.id
+    JOIN $table_users u ON o.user_id = u.ID
+    JOIN $table_posts pst ON o.event_id = pst.ID"
+    );
+
+    // Display payments table
+    $payments_table = new Event_Payments_Table();
+    $payments_table->set_transactions($transactions);
+    $payments_table->prepare_items();
+    ?>
+    <div class="wrap">
+        <h1 class="wp-heading-inline"><?php esc_html_e('سفارشات و پرداخت ها', 'textdomain'); ?></h1>
+        <hr class="wp-header-end">
+        <form method="get">
+            <input type="hidden" name="page" value="<?php echo esc_attr($_REQUEST['page']); ?>">
+            <?php $payments_table->search_box(__('Search', 'textdomain'), 'event-payments-search'); ?>
+            <?php $payments_table->display(); ?>
+        </form>
+    </div>
+    <?php
+}
