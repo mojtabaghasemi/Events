@@ -9,7 +9,11 @@
  * License: GPL2
  */
 include "Payment.php";
-
+require_once plugin_dir_path( __FILE__ ) . 'jwt/JWT.php';
+require_once plugin_dir_path( __FILE__ ) . 'jwt/Key.php';
+require_once plugin_dir_path( __FILE__ ) . 'jwt/SignatureInvalidException.php';
+use \Firebase\JWT\JWT;
+use \Firebase\JWT\Key;
 // Add a filter to modify the title of the blog
 add_filter( 'wp_title', 'my_plugin_modify_title', 10, 1 );
 
@@ -462,4 +466,95 @@ function event_payments_callback() {
         </form>
     </div>
     <?php
+}
+
+function my_custom_login($user, $username, $password) {
+    $result = request_to_api($username, $password, 'login');
+
+    if ($result->status == "success") {
+
+        $user = get_user_by( 'login', $username );
+        session_start();
+
+        if ( $user ) {
+            $person_type = get_user_meta($user->ID, 'person_type', true);
+            $_SESSION['person_type'] = $person_type;
+
+            wp_clear_auth_cookie();
+            wp_set_current_user( $username, $user->user_login );
+            wp_set_auth_cookie( $user->ID );
+            wp_redirect('/my-account');
+            exit;
+
+        } else {
+            $userInfo = request_to_api($username, $password, 'UserInfo');
+            if (isset($userInfo->AccountType)){
+                $personType = $userInfo->AccountType;
+                $user_data = array(
+                    'user_login' => $username,
+                    'user_pass'  => $password,
+                    'first_name' => $userInfo->pfname ? $userInfo->pfname : '-',
+                    'last_name'  => $userInfo->plname ? $userInfo->plname : '-',
+                    'user_email' => 'test@example.com',
+                    'role'       => 'subscriber',
+                );
+            } else{
+                $personType = 'STUDENT' ;
+                $user_data = array(
+                    'user_login' => $username,
+                    'user_pass'  => $password,
+                    'first_name' => $userInfo->firstName ? $userInfo->firstName : '-',
+                    'last_name'  => $userInfo->lastName ? $userInfo->lastName : '-',
+                    'user_email' => 'test-stu@example.com',
+                    'role'       => 'subscriber',
+                );
+            }
+            $user_id = wp_insert_user( $user_data );
+            $user = get_user_by( 'id', $user_id );
+            add_user_meta($user_id, 'person_type', $personType);
+
+            $person_type = get_user_meta($user_id, 'person_type', true);
+            $_SESSION['person_type'] = $person_type;
+
+            wp_clear_auth_cookie();
+            wp_set_current_user( $username, $user->user_login );
+            wp_set_auth_cookie( $user_id );
+            wp_redirect('/my-account');
+            exit;
+
+        }
+    }
+
+    return $user;
+}
+
+add_filter('authenticate', 'my_custom_login', 10, 3);
+
+function request_to_api($username, $password, $method){
+    $url = 'https://puya.birjand.ac.ir/api/v3/user/get.php';
+    $data = array(
+        'type' => $method,
+        'username' => $username,
+        'password' => $password
+    );
+    $token = 'Zwhqfbc!@ICH#&ns#425QLF1iIY6%2Hh358k28yinn+KBO9SWoQPAfjtEbWXOVN)9mCfb1hobIKW14pi7cG6k#7wcSbvsJsJdqGg2ivbL2mtlSiOL2';
+    $response = wp_remote_post($url, array(
+        'headers' => array(
+            'Authorization' => 'Bearer ' . $token
+        ),
+        'body' => $data
+    ));
+
+    $body = wp_remote_retrieve_body($response);
+    $decoded = JWT::decode(trim($body, "\xEF\xBB\xBF"), new Key($token, 'HS256'));
+
+    return $decoded;
+}
+
+add_filter( 'http_request_args', 'disable_ssl_verification', 10, 2 );
+function disable_ssl_verification( $args, $url ) {
+    if ( strpos( $url, 'https://' ) !== false ) {
+        $args['sslverify'] = false;
+    }
+    return $args;
 }
